@@ -2,6 +2,7 @@
 pub enum AppErrorType {
     FetchError,
     NotFound,
+    InvalidData,
 }
 
 #[derive(Debug)]

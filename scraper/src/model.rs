@@ -109,8 +109,8 @@ pub struct Planet {
     edited: String,
 }
 
-impl From<Value> for People {
-    fn from(v: Value) -> Self {
+impl From<&Value> for People {
+    fn from(v: &Value) -> Self {
         let mut p = People::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.height = v["height"].as_str().unwrap().to_string();
