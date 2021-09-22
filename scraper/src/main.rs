@@ -3,54 +3,215 @@ mod model;
 mod error;
 extern crate reqwest;
 
+use serde_json::Value;
 use std::{fs::File, io::Write, path::Path};
 
-use model::EntityFetcher;
-use serde_json::Value;
-
 use crate::{
-    error::{AppError, AppErrorType},
-    model::{EntityType, Id, People, Url},
+    error::AppError,
+    model::{EntityType, Film, People, Planet, Species, Starship, Url, Vehicle},
 };
-
 fn main() -> Result<(), AppError> {
-    let id_to_url = |id: Id| -> Url {
-        println!("id2url - in {}", id);
-        let url: Url = format!("https://api.starwars.run/api/people/{}", id);
-        println!("id2url - out {}", url);
-        url
-    };
-    let entity_to_url = |entity: EntityType| -> Url {
-        match entity {
-            EntityType::People => "https://api.starwars.run/api/people/".to_string(),
-            _ => "https://api.starwars.run/api/".to_string(),
+    let base_url = "https://api.starwars.run/api";
+
+    let entity_to_url = |entity_type: EntityType| -> Url {
+        match entity_type {
+            _ => format!("{}/{}/", base_url, entity_type),
         }
     };
-    let url_to_person = |url: Url| -> People {
-        println!("url2person in {}", url);
+    let find_all_films = || -> Vec<Film> {
+        let mut results: Vec<Film> = vec![];
+        let mut active_url = Some(entity_to_url(EntityType::Film));
+        while let Some(next_url) = active_url {
+            println!("fetching url: {:?}", next_url);
 
-        let value = reqwest::blocking::get(url)
-            .map_err(|error| AppError {
-                message: None,
-                cause: Some(error.to_string()),
-                error_type: AppErrorType::FetchError,
-            })
-            .unwrap()
-            .json::<Value>()
-            .map_err(|_| AppError {
-                message: Some(format!("could not fetch entity ")),
-                cause: None,
-                error_type: AppErrorType::NotFound,
-            })
-            .unwrap();
-        let p = People::from(&value);
-        println!("url2person - out  {:?}", p);
-        p
+            let sr = reqwest::blocking::get(next_url.clone())
+                .unwrap()
+                .json::<Value>()
+                .unwrap();
+            println!("found results next url: {:?} {:?}", sr["next"], sr["count"]);
+            sr["results"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .for_each(|f| results.push(Film::from(f)));
+            let next = &sr["next"];
+            match next {
+                Value::Null => active_url = None,
+                Value::String(next) => active_url = Some(next.to_string()),
+                _ => todo!(),
+            };
+        }
+        results
     };
 
-    let fetch_person = compose(id_to_url, url_to_person);
-    dbg!(fetch_person(1));
-    //let fetch_people = compose(entity_to_url, url_to_person);
+    let all_films = find_all_films();
+    //WRITE TO FILE
+    let path = Path::new("films.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = File::create(&path).unwrap();
+
+    match file.write_all(serde_json::to_string(&all_films).unwrap().as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
+
+    let find_all_planets = || -> Vec<Planet> {
+        let mut results: Vec<Planet> = vec![];
+        let mut active_url = Some(entity_to_url(EntityType::Planet));
+        while let Some(next_url) = active_url {
+            println!("fetching url: {:?}", next_url);
+
+            let sr = reqwest::blocking::get(next_url.clone())
+                .unwrap()
+                .json::<Value>()
+                .unwrap();
+            println!("found results next url: {:?} {:?}", sr["next"], sr["count"]);
+            sr["results"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .for_each(|f| results.push(Planet::from(f)));
+            let next = &sr["next"];
+            match next {
+                Value::Null => active_url = None,
+                Value::String(next) => active_url = Some(next.to_string()),
+                _ => todo!(),
+            };
+        }
+        results
+    };
+
+    let all_planets = find_all_planets();
+    //WRITE TO FILE
+    let path = Path::new("planets.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = File::create(&path).unwrap();
+
+    match file.write_all(serde_json::to_string(&all_planets).unwrap().as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
+
+    let find_all_starships = || -> Vec<Starship> {
+        let mut results: Vec<Starship> = vec![];
+        let mut active_url = Some(entity_to_url(EntityType::Starship));
+        while let Some(next_url) = active_url {
+            println!("fetching url: {:?}", next_url);
+
+            let sr = reqwest::blocking::get(next_url.clone())
+                .unwrap()
+                .json::<Value>()
+                .unwrap();
+            println!("found results next url: {:?} {:?}", sr["next"], sr["count"]);
+            sr["results"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .for_each(|f| results.push(Starship::from(f)));
+            let next = &sr["next"];
+            match next {
+                Value::Null => active_url = None,
+                Value::String(next) => active_url = Some(next.to_string()),
+                _ => todo!(),
+            };
+        }
+        results
+    };
+
+    let all_starships = find_all_starships();
+    //WRITE TO FILE
+    let path = Path::new("starships.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = File::create(&path).unwrap();
+
+    match file.write_all(serde_json::to_string(&all_starships).unwrap().as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
+
+    let find_all_vehicles = || -> Vec<Vehicle> {
+        let mut results: Vec<Vehicle> = vec![];
+        let mut active_url = Some(entity_to_url(EntityType::Vehicle));
+        while let Some(next_url) = active_url {
+            println!("fetching url: {:?}", next_url);
+
+            let sr = reqwest::blocking::get(next_url.clone())
+                .unwrap()
+                .json::<Value>()
+                .unwrap();
+            println!("found results next url: {:?} {:?}", sr["next"], sr["count"]);
+            sr["results"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .for_each(|f| results.push(Vehicle::from(f)));
+            let next = &sr["next"];
+            match next {
+                Value::Null => active_url = None,
+                Value::String(next) => active_url = Some(next.to_string()),
+                _ => todo!(),
+            };
+        }
+        results
+    };
+
+    let all_vehicles = find_all_vehicles();
+    //WRITE TO FILE
+    let path = Path::new("vehicles.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = File::create(&path).unwrap();
+
+    match file.write_all(serde_json::to_string(&all_vehicles).unwrap().as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
+
+    let find_all_species = || -> Vec<Species> {
+        let mut results: Vec<Species> = vec![];
+        let mut active_url = Some(entity_to_url(EntityType::Species));
+        while let Some(next_url) = active_url {
+            println!("fetching url: {:?}", next_url);
+
+            let sr = reqwest::blocking::get(next_url.clone())
+                .unwrap()
+                .json::<Value>()
+                .unwrap();
+            println!("found results next url: {:?} {:?}", sr["next"], sr["count"]);
+            sr["results"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .for_each(|f| results.push(Species::from(f)));
+            let next = &sr["next"];
+            match next {
+                Value::Null => active_url = None,
+                Value::String(next) => active_url = Some(next.to_string()),
+                _ => todo!(),
+            };
+        }
+        results
+    };
+
+    let all_species = find_all_species();
+    //WRITE TO FILE
+    let path = Path::new("species.json");
+    let display = path.display();
+
+    // Open a file in write-only mode, returns `io::Result<File>`
+    let mut file = File::create(&path).unwrap();
+
+    match file.write_all(serde_json::to_string(&all_species).unwrap().as_bytes()) {
+        Err(why) => panic!("couldn't write to {}: {}", display, why),
+        Ok(_) => println!("successfully wrote to {}", display),
+    }
 
     let find_all_peeps = || -> Vec<People> {
         let mut results: Vec<People> = vec![];
@@ -91,7 +252,6 @@ fn main() -> Result<(), AppError> {
         Err(why) => panic!("couldn't write to {}: {}", display, why),
         Ok(_) => println!("successfully wrote to {}", display),
     }
-
     Ok(())
 }
 

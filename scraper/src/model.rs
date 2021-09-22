@@ -1,7 +1,6 @@
 extern crate reqwest;
-use reqwest::Response;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, str::FromStr};
+use std::fmt::{self, Debug};
 
 use serde_json::Value;
 
@@ -12,44 +11,25 @@ pub type Id = u32;
 pub type EntityFetcher = dyn Fn(Id) -> Result<Value, AppError>;
 //pub type FetchEntityFromUrl = dyn Fn(Url) -> FetchEntity;
 
-#[derive(Debug, Default)]
-pub struct AppData {
-    pub people: Vec<People>,
-    _starships: Vec<Starship>,
-    _vehicles: Vec<Vehicle>,
-    _planets: Vec<Planet>,
-    _species: Vec<Species>,
-    _films: Vec<Film>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RootEntity {
-    name: String,
-    url: Url,
-}
-
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum EntityType {
     Film,
     People,
     Planet,
-    SearchResult,
     Species,
     Starship,
     Vehicle,
 }
-impl FromStr for EntityType {
-    type Err = ();
-    fn from_str(input: &str) -> Result<EntityType, Self::Err> {
-        match input {
-            "people" => Ok(EntityType::People),
-            "planets" => Ok(EntityType::Planet),
-            "species" => Ok(EntityType::Species),
-            "films" => Ok(EntityType::Film),
-            "starships" => Ok(EntityType::Starship),
-            "vehicles" => Ok(EntityType::Vehicle),
-            _ => Err(()),
+impl fmt::Display for EntityType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            EntityType::Film => write!(f, "films"),
+            EntityType::People => write!(f, "people"),
+            EntityType::Planet => write!(f, "planets"),
+            EntityType::Species => write!(f, "species"),
+            EntityType::Starship => write!(f, "starships"),
+            EntityType::Vehicle => write!(f, "vehicles"),
         }
     }
 }
@@ -62,13 +42,7 @@ pub struct SearchResult<T> {
     pub results: Vec<T>,
 }
 
-impl<T> From<Response> for SearchResult<T> {
-    fn from(_: Response) -> Self {
-        todo!()
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Starship {
     name: String,
     model: String,
@@ -90,7 +64,27 @@ pub struct Starship {
     created: String,
     edited: String,
 }
-#[derive(Serialize, Deserialize, Debug)]
+
+impl From<&Value> for Starship {
+    fn from(v: &Value) -> Self {
+        let mut p = Starship::default();
+        p.name = v["name"].as_str().unwrap().to_string();
+        p.model = v["model"].as_str().unwrap().to_string();
+        p.manufacturer = v["manufacturer"].as_str().unwrap().to_string();
+        p.cost_in_credits = v["cost_in_credits"].as_str().unwrap().to_string();
+        p.length = v["length"].as_str().unwrap().to_string();
+        p.max_atmosphering_speed = v["max_atmosphering_speed"].as_str().unwrap().to_string();
+        p.crew = v["crew"].as_str().unwrap().to_string();
+        p.passengers = v["passengers"].as_str().unwrap().to_string();
+        p.cargo_capacity = v["cargo_capacity"].as_str().unwrap().to_string();
+        p.consumables = v["consumables"].as_str().unwrap().to_string();
+        p.hyperdrive_rating = v["hyperdrive_rating"].as_str().unwrap().to_string();
+        p.mglt = v["MGLT"].as_str().unwrap().to_string();
+        p.starship_class = v["starship_class"].as_str().unwrap().to_string();
+        p
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Default)]
 
 pub struct Planet {
     name: String,
@@ -109,18 +103,18 @@ pub struct Planet {
     edited: String,
 }
 
-impl From<&Value> for People {
+impl From<&Value> for Planet {
     fn from(v: &Value) -> Self {
-        let mut p = People::default();
+        let mut p = Planet::default();
         p.name = v["name"].as_str().unwrap().to_string();
-        p.height = v["height"].as_str().unwrap().to_string();
-        p.hair_color = v["hair_color"].as_str().unwrap().to_string();
-        p.mass = v["mass"].as_str().unwrap().to_string();
-        p.skin_color = v["skin_color"].as_str().unwrap().to_string();
-        p.eye_color = v["eye_color"].as_str().unwrap().to_string();
-        p.birth_year = v["birth_year"].as_str().unwrap().to_string();
-        p.gender = v["gender"].as_str().unwrap().to_string();
-        p.homeworld = v["homeworld"].as_str().unwrap().to_string();
+        p.rotation_period = v["rotation_period"].as_str().unwrap().to_string();
+        p.orbital_period = v["orbital_period"].as_str().unwrap().to_string();
+        p.diameter = v["diameter"].as_str().unwrap().to_string();
+        p.climate = v["climate"].as_str().unwrap().to_string();
+        p.gravity = v["gravity"].as_str().unwrap().to_string();
+        p.terrain = v["terrain"].as_str().unwrap().to_string();
+        p.surface_water = v["surface_water"].as_str().unwrap().to_string();
+        p.population = v["population"].as_str().unwrap().to_string();
         p
     }
 }
@@ -144,12 +138,29 @@ pub struct People {
     pub created: String,
     pub edited: String,
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
+
+impl From<&Value> for People {
+    fn from(v: &Value) -> Self {
+        let mut p = People::default();
+        p.name = v["name"].as_str().unwrap().to_string();
+        p.height = v["height"].as_str().unwrap().to_string();
+        p.hair_color = v["hair_color"].as_str().unwrap().to_string();
+        p.mass = v["mass"].as_str().unwrap().to_string();
+        p.skin_color = v["skin_color"].as_str().unwrap().to_string();
+        p.eye_color = v["eye_color"].as_str().unwrap().to_string();
+        p.birth_year = v["birth_year"].as_str().unwrap().to_string();
+        p.gender = v["gender"].as_str().unwrap().to_string();
+        p.homeworld = v["homeworld"].as_str().unwrap().to_string();
+        p
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Film {
     #[serde(skip_deserializing)]
     id: String,
     title: String,
-    episode_id: i32,
+    episode_id: u64,
     opening_crawl: String,
     director: String,
     producer: String,
@@ -163,15 +174,20 @@ pub struct Film {
     created: String,
     edited: String,
 }
-// impl Film {
-//     fn new(film:Film)->Self{
-//         Self{
-//             id:Uuid::new_v4().to_string(),
-//         ..film
-//         }
-//     }
-// }
-#[derive(Serialize, Deserialize, Debug)]
+impl From<&Value> for Film {
+    fn from(v: &Value) -> Self {
+        let mut p = Film::default();
+        p.title = v["title"].as_str().unwrap().to_string();
+        p.episode_id = v["episode_id"].as_u64().unwrap();
+        p.opening_crawl = v["opening_crawl"].as_str().unwrap().to_string();
+        p.director = v["director"].as_str().unwrap().to_string();
+        p.producer = v["producer"].as_str().unwrap().to_string();
+        p.release_date = v["release_date"].as_str().unwrap().to_string();
+        p
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Species {
     name: String,
     classification: String,
@@ -189,8 +205,21 @@ pub struct Species {
     created: String,
     edited: String,
 }
-
-#[derive(Serialize, Deserialize, Debug)]
+impl From<&Value> for Species {
+    fn from(v: &Value) -> Self {
+        let mut p = Species::default();
+        p.name = v["name"].as_str().unwrap().to_string();
+        p.classification = v["classification"].as_str().unwrap().to_string();
+        p.designation = v["designation"].as_str().unwrap().to_string();
+        p.average_height = v["average_height"].as_str().unwrap().to_string();
+        p.average_height = v["average_height"].as_str().unwrap().to_string();
+        p.average_lifespan = v["average_lifespan"].as_str().unwrap().to_string();
+        p.eye_colors = v["eye_colors"].as_str().unwrap().to_string();
+        p.hair_colors = v["hair_colors"].as_str().unwrap().to_string();
+        p
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Vehicle {
     cargo_capacity: String,
     consumables: String,
@@ -208,4 +237,20 @@ pub struct Vehicle {
     url: Url,
     created: String,
     edited: String,
+}
+impl From<&Value> for Vehicle {
+    fn from(v: &Value) -> Self {
+        let mut p = Vehicle::default();
+        p.name = v["name"].as_str().unwrap().to_string();
+        p.cargo_capacity = v["cargo_capacity"].as_str().unwrap().to_string();
+        p.consumables = v["consumables"].as_str().unwrap().to_string();
+        p.cost_in_credits = v["cost_in_credits"].as_str().unwrap().to_string();
+        p.crew = v["crew"].as_str().unwrap().to_string();
+        p.length = v["length"].as_str().unwrap().to_string();
+        p.manufacturer = v["manufacturer"].as_str().unwrap().to_string();
+        p.max_atmosphering_speed = v["max_atmosphering_speed"].as_str().unwrap().to_string();
+        p.model = v["model"].as_str().unwrap().to_string();
+        p.passengers = v["passengers"].as_str().unwrap().to_string();
+        p
+    }
 }
