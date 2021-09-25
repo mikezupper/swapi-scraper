@@ -1,0 +1,9 @@
+[package]
+edition = "2018"
+name = "sw-graph"
+version = "0.1.0"
+
+[dependencies]
+indradb-lib = {version="2.1.0"}
+log = "0.4"
+tempfile = "^3.2.0"

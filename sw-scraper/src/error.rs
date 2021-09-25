@@ -1,8 +1,9 @@
 #[derive(Debug)]
 pub enum AppErrorType {
-    FetchError,
-    NotFound,
-    InvalidData,
+    _FetchError,
+    _NotFound,
+    _InvalidData,
+    WriteError,
 }
 
 #[derive(Debug)]

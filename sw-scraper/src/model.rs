@@ -65,8 +65,8 @@ pub struct Starship {
     edited: String,
 }
 
-impl From<&Value> for Starship {
-    fn from(v: &Value) -> Self {
+impl From<Value> for Starship {
+    fn from(v: Value) -> Self {
         let mut p = Starship::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.model = v["model"].as_str().unwrap().to_string();
@@ -103,8 +103,8 @@ pub struct Planet {
     edited: String,
 }
 
-impl From<&Value> for Planet {
-    fn from(v: &Value) -> Self {
+impl From<Value> for Planet {
+    fn from(v: Value) -> Self {
         let mut p = Planet::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.rotation_period = v["rotation_period"].as_str().unwrap().to_string();
@@ -139,8 +139,8 @@ pub struct People {
     pub edited: String,
 }
 
-impl From<&Value> for People {
-    fn from(v: &Value) -> Self {
+impl From<Value> for People {
+    fn from(v: Value) -> Self {
         let mut p = People::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.height = v["height"].as_str().unwrap().to_string();
@@ -174,8 +174,8 @@ pub struct Film {
     created: String,
     edited: String,
 }
-impl From<&Value> for Film {
-    fn from(v: &Value) -> Self {
+impl From<Value> for Film {
+    fn from(v: Value) -> Self {
         let mut p = Film::default();
         p.title = v["title"].as_str().unwrap().to_string();
         p.episode_id = v["episode_id"].as_u64().unwrap();
@@ -205,8 +205,8 @@ pub struct Species {
     created: String,
     edited: String,
 }
-impl From<&Value> for Species {
-    fn from(v: &Value) -> Self {
+impl From<Value> for Species {
+    fn from(v: Value) -> Self {
         let mut p = Species::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.classification = v["classification"].as_str().unwrap().to_string();
@@ -238,8 +238,8 @@ pub struct Vehicle {
     created: String,
     edited: String,
 }
-impl From<&Value> for Vehicle {
-    fn from(v: &Value) -> Self {
+impl From<Value> for Vehicle {
+    fn from(v: Value) -> Self {
         let mut p = Vehicle::default();
         p.name = v["name"].as_str().unwrap().to_string();
         p.cargo_capacity = v["cargo_capacity"].as_str().unwrap().to_string();
