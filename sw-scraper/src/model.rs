@@ -1,6 +1,6 @@
 extern crate reqwest;
 use serde::{Deserialize, Serialize};
-use std::fmt::{self, Debug};
+use std::{fmt::{self, Debug}, iter::FromIterator};
 
 use serde_json::Value;
 
@@ -252,5 +252,73 @@ impl From<Value> for Vehicle {
         p.model = v["model"].as_str().unwrap().to_string();
         p.passengers = v["passengers"].as_str().unwrap().to_string();
         p
+    }
+}
+
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub(crate) struct Collection<T> {
+    pub(crate) results: Vec<T>,
+}
+impl<Film> Collection<Film> {
+    pub(crate) fn new(results: Vec<Film>) -> Self {
+        Self { results }
+    }
+
+    pub(crate) fn add(&mut self, elem: Film) {
+        self.results.push(elem);
+    }
+}
+
+impl FromIterator<Value> for Collection<Film> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| Film::from(f)).collect())
+    }
+}
+impl FromIterator<Value> for Collection<Planet> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| Planet::from(f)).collect())
+    }
+}
+
+impl FromIterator<Value> for Collection<Species> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| Species::from(f)).collect())
+    }
+}
+
+impl FromIterator<Value> for Collection<Vehicle> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| Vehicle::from(f)).collect())
+    }
+}
+
+impl FromIterator<Value> for Collection<Starship> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| Starship::from(f)).collect())
+    }
+}
+
+impl FromIterator<Value> for Collection<People> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = Value>,
+    {
+        Collection::new(iter.into_iter().map(|f| People::from(f)).collect())
     }
 }

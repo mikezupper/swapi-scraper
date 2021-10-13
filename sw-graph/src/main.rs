@@ -2,37 +2,47 @@ use indradb::Datastore;
 use indradb::Transaction;
 use indradb::{MemoryDatastore, MemoryTransaction, SpecificVertexQuery, Type};
 use tempfile::NamedTempFile;
-
-type next_url = Option<String>;
-
-trait Factor {
-    fn factorial_tail_rec(val: next_url) -> Self;
-    fn factorial(num: next_url) -> Self;
+#[derive(Debug)]
+struct States<'a> {
+    a: &'a i32,
+    b: &'a i32,
 }
 
-impl Factor for next_url {
-    fn factorial_tail_rec(val: next_url) -> Self {
-        val
-    }
+trait Currying<T> {
+    type ReturnType: Fn(T) -> T;
+    fn add(self) -> Self::ReturnType;
+}
 
-    fn factorial(url: next_url) -> Self {
-        //fetch the next results
-        //check pagination "next", match Some/None
-        match url {
-            None => None,
-            Some(next_url_to_fetch) =>{
-                
-                Some(current_url * Self::factorial_tail_rec(current_url - 1)),
-            }
-        }
+impl Currying<i32> for States<'static> {
+    type ReturnType = Box<dyn Fn(i32) -> i32>;
+
+    fn add(self) -> Self::ReturnType {
+        Box::new(move |x| x * self.a)
     }
 }
 
+fn fmt(prev_str: &str) -> String {
+    let mut new_str = String::new();
+
+    let closure_annotated = |next_str| -> String {
+        new_str.push_str(prev_str);
+        new_str.push_str(next_str);
+        return new_str;
+    };
+
+    closure_annotated("dolor sit amet")
+}
 fn main() {
-    println!("hello!");
+    ///CLOSURES
+    let r_txt = "Lorem ipsum ";
+    dbg!("Lorem ipsum dolor sit amet", fmt(r_txt));
 
-    let result: next_url = Factor::factorial(3);
-    assert_eq!(6, result);
+    let r_value: States = States { a: &100, b: &100 };
+
+    let r1 = r_value.add();
+    let r2 = r1(5);
+
+    dbg!(500, r2);
     /*
 
     let path = NamedTempFile::new().unwrap();

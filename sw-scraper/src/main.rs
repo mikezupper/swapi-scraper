@@ -2,6 +2,7 @@ mod model;
 
 mod error;
 extern crate reqwest;
+use model::Collection;
 use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
@@ -65,64 +66,6 @@ impl Factor for NextUrlToFetch {
         }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Default)]
-struct Collection<T> {
-    results: Vec<T>,
-}
-impl<Film> Collection<Film> {
-    fn new(results: Vec<Film>) -> Self {
-        Self { results }
-    }
-
-    fn add(&mut self, elem: Film) {
-        self.results.push(elem);
-    }
-}
-
-impl FromIterator<Value> for Collection<Film> {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Value>,
-    {
-        Collection::new(iter.into_iter().map(|f| Film::from(f)).collect())
-    }
-}
-impl FromIterator<Value> for Collection<Planet> {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Value>,
-    {
-        Collection::new(iter.into_iter().map(|f| Planet::from(f)).collect())
-    }
-}
-
-impl FromIterator<Value> for Collection<Species> {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Value>,
-    {
-        Collection::new(iter.into_iter().map(|f| Species::from(f)).collect())
-    }
-}
-
-impl FromIterator<Value> for Collection<Vehicle> {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Value>,
-    {
-        Collection::new(iter.into_iter().map(|f| Vehicle::from(f)).collect())
-    }
-}
-
-
-impl FromIterator<Value> for Collection<Starship> {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = Value>,
-    {
-        Collection::new(iter.into_iter().map(|f| Starship::from(f)).collect())
-    }
-}
 fn main() -> Result<(), AppError> {
     let base_url = "https://api.starwars.run/api";
 
@@ -140,8 +83,8 @@ fn main() -> Result<(), AppError> {
             url: Some(to_url(EntityType::Film)),
             results,
         });
-        let y = active_url.results.into_iter().collect::<Collection<Film>>();
-        y
+
+        active_url.results.into_iter().collect::<Collection<Film>>()
     };
 
     let to_path = |file_name: &str| -> File {
@@ -270,6 +213,34 @@ fn main() -> Result<(), AppError> {
         })
     };
     let content = apply(to_bytes, find_all_starships())?;
+    file.write_all(content.as_bytes()).map_err(|e| AppError {
+        message: Some(String::from("failed to write content to file")),
+        cause: Some(e.to_string()),
+        error_type: error::AppErrorType::_InvalidData,
+    })?;
+
+    //PEOPLE
+    let find_all_people = || -> Collection<People> {
+        let results = vec![];
+        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
+            url: Some(to_url(EntityType::People)),
+            results,
+        });
+        let y = active_url
+            .results
+            .into_iter()
+            .collect::<Collection<People>>();
+        y
+    };
+    let mut file = apply(to_path, "people-new.json");
+    let to_bytes = |all: Collection<People>| -> Result<String, AppError> {
+        serde_json::to_string(&all).map_err(|e| AppError {
+            message: Some(String::from("failed to serialize data to json")),
+            cause: Some(e.to_string()),
+            error_type: error::AppErrorType::_InvalidData,
+        })
+    };
+    let content = apply(to_bytes, find_all_people())?;
     file.write_all(content.as_bytes()).map_err(|e| AppError {
         message: Some(String::from("failed to write content to file")),
         cause: Some(e.to_string()),
