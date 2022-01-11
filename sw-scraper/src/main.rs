@@ -3,10 +3,10 @@ mod model;
 mod error;
 extern crate reqwest;
 use model::Collection;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use serde_json::Value;
-use std::{fs::File, io::Write, iter::FromIterator, path::Path};
+use std::{fs::File, io::Write, path::Path};
 
 use crate::{
     error::AppError,
@@ -66,186 +66,109 @@ impl Factor for NextUrlToFetch {
         }
     }
 }
-fn main() -> Result<(), AppError> {
-    let base_url = "https://api.starwars.run/api";
+static BASE_URL: &'static str = "https://api.starwars.run/api";
 
-    // Helper Function - entity type to url
-    let to_url = |entity_type: EntityType| -> Url {
-        match entity_type {
-            _ => format!("{}/{}/", base_url, entity_type),
-        }
-    };
+fn write_to_file<T>(file_name: &'static str, f: impl Fn() -> Collection<T>) -> Result<(), AppError>
+where
+    T: Serialize,
+{
+    let mut file = apply(to_path, file_name).map_err(|e| AppError {
+        message: Some(String::from("failed to create file")),
+        cause: Some(e.to_string()),
+        error_type: error::AppErrorType::WriteError,
+    })?;
+    let content = apply(to_bytes, f())?;
+
+    file.write_all(content.as_bytes()).map_err(|e| AppError {
+        message: Some(String::from("failed to write all to file")),
+        cause: Some(e.to_string()),
+        error_type: error::AppErrorType::WriteError,
+    })
+}
+fn fetch_all_pages(entity: EntityType) -> Vec<Value> {
+    let results = vec![];
+    let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
+        url: Some(to_url(entity)),
+        results,
+    });
+
+    active_url.results
+}
+
+fn to_url(entity_type: EntityType) -> Url {
+    match entity_type {
+        _ => format!("{}/{}/", BASE_URL, entity_type),
+    }
+}
+
+fn to_path(file_name: &'static str) -> Result<File, std::io::Error> {
+    File::create(Path::new(file_name))
+}
+
+fn to_bytes<T>(all: Collection<T>) -> Result<String, AppError>
+where
+    T: Serialize,
+{
+    serde_json::to_string(&all).map_err(|e| AppError {
+        message: Some(String::from("failed to serialize data to json")),
+        cause: Some(e.to_string()),
+        error_type: error::AppErrorType::_InvalidData,
+    })
+}
+
+fn main() -> Result<(), AppError> {
+    let _client = reqwest::blocking::Client::builder().build();
+
+    //create base output dir
+    fs::create_dir::<_>("output").unwrap();
 
     //FILMS
-    let find_all = || -> Collection<Film> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::Film)),
-            results,
-        });
-
-        active_url.results.into_iter().collect::<Collection<Film>>()
+    let find_all = || {
+        fetch_all_pages(EntityType::Film)
+            .into_iter()
+            .collect::<Collection<Film>>()
     };
-
-    let to_path = |file_name: &str| -> File {
-        let p = Path::new(file_name);
-        File::create(&p).unwrap()
-    };
-    let mut file = apply(to_path, "films-new.json");
-    let to_bytes = |all: Vec<Film>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all().results)?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/films.json", find_all)?;
 
     //PLANETS
-    let find_all = || -> Collection<Planet> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::Planet)),
-            results,
-        });
-        let y = active_url
-            .results
+    let find_all = || {
+        fetch_all_pages(EntityType::Planet)
             .into_iter()
-            .collect::<Collection<Planet>>();
-        y
+            .collect::<Collection<Planet>>()
     };
-
-    let mut file = apply(to_path, "planets-new.json");
-    let to_bytes = |all: Collection<Planet>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all())?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/planets.json", find_all)?;
 
     //SPECIES
-    let find_all_species = || -> Collection<Species> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::Species)),
-            results,
-        });
-        let y = active_url
-            .results
+    let find_all = || {
+        fetch_all_pages(EntityType::Species)
             .into_iter()
-            .collect::<Collection<Species>>();
-        y
+            .collect::<Collection<Species>>()
     };
-    let mut file = apply(to_path, "species-new.json");
-    let to_bytes = |all: Collection<Species>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all_species())?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/species.json", find_all)?;
 
     //VEHICLES
-    let find_all_vehicles = || -> Collection<Vehicle> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::Vehicle)),
-            results,
-        });
-        let y = active_url
-            .results
+    let find_all = || {
+        fetch_all_pages(EntityType::Vehicle)
             .into_iter()
-            .collect::<Collection<Vehicle>>();
-        y
+            .collect::<Collection<Vehicle>>()
     };
-    let mut file = apply(to_path, "vehicle-new.json");
-    let to_bytes = |all: Collection<Vehicle>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all_vehicles())?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/vehicles.json", find_all)?;
 
     //STARSHIPS
-    let find_all_starships = || -> Collection<Starship> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::Starship)),
-            results,
-        });
-        let y = active_url
-            .results
+    let find_all = || {
+        fetch_all_pages(EntityType::Starship)
             .into_iter()
-            .collect::<Collection<Starship>>();
-        y
+            .collect::<Collection<Starship>>()
     };
-    let mut file = apply(to_path, "starship-new.json");
-    let to_bytes = |all: Collection<Starship>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all_starships())?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/starship.json", find_all)?;
 
     //PEOPLE
-    let find_all_people = || -> Collection<People> {
-        let results = vec![];
-        let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-            url: Some(to_url(EntityType::People)),
-            results,
-        });
-        let y = active_url
-            .results
+    let find_all = || {
+        fetch_all_pages(EntityType::People)
             .into_iter()
-            .collect::<Collection<People>>();
-        y
+            .collect::<Collection<People>>()
     };
-    let mut file = apply(to_path, "people-new.json");
-    let to_bytes = |all: Collection<People>| -> Result<String, AppError> {
-        serde_json::to_string(&all).map_err(|e| AppError {
-            message: Some(String::from("failed to serialize data to json")),
-            cause: Some(e.to_string()),
-            error_type: error::AppErrorType::_InvalidData,
-        })
-    };
-    let content = apply(to_bytes, find_all_people())?;
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write content to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })?;
+    write_to_file("output/people.json", find_all)?;
     Ok(())
 }
 
@@ -256,7 +179,7 @@ where
     fun(args)
 }
 
-fn compose<X, Y, Z, F, G>(f: F, g: G) -> impl Fn(X) -> Z
+fn _compose<X, Y, Z, F, G>(f: F, g: G) -> impl Fn(X) -> Z
 where
     F: Fn(X) -> Y,
     G: Fn(Y) -> Z,
