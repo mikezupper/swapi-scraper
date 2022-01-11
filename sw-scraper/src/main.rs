@@ -6,7 +6,7 @@ use model::Collection;
 use serde::Serialize;
 
 use serde_json::Value;
-use std::{fs::File, io::Write, path::Path};
+use std::{fs::{File, self}, io::Write, path::Path};
 
 use crate::{
     error::AppError,

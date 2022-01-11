@@ -4,11 +4,11 @@ use std::{fmt::{self, Debug}, iter::FromIterator};
 
 use serde_json::Value;
 
-use crate::error::AppError;
+//use crate::error::AppError;
 
 pub type Url = String;
-pub type Id = u32;
-pub type EntityFetcher = dyn Fn(Id) -> Result<Value, AppError>;
+//pub type Id = u32;
+//pub type EntityFetcher = dyn Fn(Id) -> Result<Value, AppError>;
 //pub type FetchEntityFromUrl = dyn Fn(Url) -> FetchEntity;
 
 #[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq)]
@@ -260,14 +260,15 @@ impl From<Value> for Vehicle {
 pub(crate) struct Collection<T> {
     pub(crate) results: Vec<T>,
 }
+
 impl<Film> Collection<Film> {
     pub(crate) fn new(results: Vec<Film>) -> Self {
         Self { results }
     }
 
-    pub(crate) fn add(&mut self, elem: Film) {
-        self.results.push(elem);
-    }
+    // pub(crate) fn add(&mut self, elem: Film) {
+    //     self.results.push(elem);
+    // }
 }
 
 impl FromIterator<Value> for Collection<Film> {
