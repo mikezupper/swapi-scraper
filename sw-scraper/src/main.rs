@@ -1,12 +1,18 @@
+mod error;
 mod model;
 
-mod error;
 extern crate reqwest;
+
 use model::Collection;
 use serde::Serialize;
 
 use serde_json::Value;
-use std::{fs::{File, self}, io::Write, path::Path};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
+use tokio::join;
 
 use crate::{
     error::AppError,
@@ -36,7 +42,6 @@ impl Factor for NextUrlToFetch {
         //check pagination "next", match Some/None
         if let Some(next_url_to_fetch) = current_url_to_fetch {
             println!("next url to fetch!! {:?}", next_url_to_fetch);
-
             let sr = reqwest::blocking::get(next_url_to_fetch)
                 .unwrap()
                 .json::<Value>()
@@ -72,11 +77,7 @@ fn write_to_file<T>(file_name: &'static str, f: impl Fn() -> Collection<T>) -> R
 where
     T: Serialize,
 {
-    let mut file = apply(to_path, file_name).map_err(|e| AppError {
-        message: Some(String::from("failed to create file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::WriteError,
-    })?;
+    let mut file = get_file(file_name)?;
     let content = apply(to_bytes, f())?;
 
     file.write_all(content.as_bytes()).map_err(|e| AppError {
@@ -85,6 +86,15 @@ where
         error_type: error::AppErrorType::WriteError,
     })
 }
+
+fn get_file(file_name: &'static str) -> Result<File, AppError> {
+    apply(to_path, file_name).map_err(|e| AppError {
+        message: Some(String::from("failed to create file")),
+        cause: Some(e.to_string()),
+        error_type: error::AppErrorType::WriteError,
+    })
+}
+
 fn fetch_all_pages(entity: EntityType) -> Vec<Value> {
     let results = vec![];
     let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
@@ -116,60 +126,81 @@ where
     })
 }
 
-fn main() -> Result<(), AppError> {
-    let _client = reqwest::blocking::Client::builder().build();
-
+#[tokio::main]
+async fn main() {
     //create base output dir
     fs::create_dir::<_>("output").unwrap();
+    let mut handles = vec![];
+    handles.push(tokio::spawn(async move {
+        //Film
+        let find_all = || {
+            fetch_all_pages(EntityType::Film)
+                .into_iter()
+                .collect::<Collection<Film>>()
+        };
+        write_to_file("output/Film.json", find_all).unwrap()
+    }));
+    handles.push(tokio::spawn(async move {
+        //Planet
+        let find_all = || {
+            fetch_all_pages(EntityType::Planet)
+                .into_iter()
+                .collect::<Collection<Planet>>()
+        };
+        write_to_file("output/Planet.json", find_all).unwrap()
+    }));
+    handles.push(tokio::spawn(async move {
+        //People
+        let find_all = || {
+            fetch_all_pages(EntityType::People)
+                .into_iter()
+                .collect::<Collection<People>>()
+        };
+        write_to_file("output/People.json", find_all).unwrap()
+    }));
+    handles.push(tokio::spawn(async move {
+        //Species
+        let find_all = || {
+            fetch_all_pages(EntityType::Species)
+                .into_iter()
+                .collect::<Collection<Species>>()
+        };
+        write_to_file("output/Species.json", find_all).unwrap()
+    }));
+    handles.push(tokio::spawn(async move {
+        //Starship
+        let find_all = || {
+            fetch_all_pages(EntityType::Starship)
+                .into_iter()
+                .collect::<Collection<Starship>>()
+        };
+        write_to_file("output/Starship.json", find_all).unwrap()
+    }));
 
-    //FILMS
-    let find_all = || {
-        fetch_all_pages(EntityType::Film)
-            .into_iter()
-            .collect::<Collection<Film>>()
-    };
-    write_to_file("output/films.json", find_all)?;
+    handles.push(tokio::spawn(async move {
+        //Vehicle
+        let find_all = || {
+            fetch_all_pages(EntityType::Vehicle)
+                .into_iter()
+                .collect::<Collection<Vehicle>>()
+        };
+        write_to_file("output/Vehicle.json", find_all).unwrap()
+    }));
 
-    //PLANETS
-    let find_all = || {
-        fetch_all_pages(EntityType::Planet)
-            .into_iter()
-            .collect::<Collection<Planet>>()
-    };
-    write_to_file("output/planets.json", find_all)?;
-
-    //SPECIES
-    let find_all = || {
-        fetch_all_pages(EntityType::Species)
-            .into_iter()
-            .collect::<Collection<Species>>()
-    };
-    write_to_file("output/species.json", find_all)?;
-
-    //VEHICLES
-    let find_all = || {
-        fetch_all_pages(EntityType::Vehicle)
-            .into_iter()
-            .collect::<Collection<Vehicle>>()
-    };
-    write_to_file("output/vehicles.json", find_all)?;
-
-    //STARSHIPS
-    let find_all = || {
-        fetch_all_pages(EntityType::Starship)
-            .into_iter()
-            .collect::<Collection<Starship>>()
-    };
-    write_to_file("output/starship.json", find_all)?;
-
-    //PEOPLE
-    let find_all = || {
-        fetch_all_pages(EntityType::People)
-            .into_iter()
-            .collect::<Collection<People>>()
-    };
-    write_to_file("output/people.json", find_all)?;
-    Ok(())
+    let joins = join!(
+        handles.pop().unwrap(),
+        handles.pop().unwrap(),
+        handles.pop().unwrap(),
+        handles.pop().unwrap(),
+        handles.pop().unwrap(),
+        handles.pop().unwrap()
+    );
+    joins.0.unwrap();
+    joins.1.unwrap();
+    joins.2.unwrap();
+    joins.3.unwrap();
+    joins.4.unwrap();
+    joins.5.unwrap();
 }
 
 fn apply<F, A, B>(fun: F, args: A) -> B
