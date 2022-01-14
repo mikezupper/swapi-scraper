@@ -1,12 +1,18 @@
-mod model;
+extern crate log;
+extern crate reqwest;
 
 mod error;
-extern crate reqwest;
+mod model;
+use log::info;
 use model::Collection;
 use serde::Serialize;
 
 use serde_json::Value;
-use std::{fs::{File, self}, io::Write, path::Path};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::Path,
+};
 
 use crate::{
     error::AppError,
@@ -35,7 +41,7 @@ impl Factor for NextUrlToFetch {
 
         //check pagination "next", match Some/None
         if let Some(next_url_to_fetch) = current_url_to_fetch {
-            println!("next url to fetch!! {:?}", next_url_to_fetch);
+            info!("factorial - {:?}",next_url_to_fetch);
 
             let sr = reqwest::blocking::get(next_url_to_fetch)
                 .unwrap()
@@ -44,7 +50,6 @@ impl Factor for NextUrlToFetch {
 
             let next_page = &sr["next"];
 
-            println!("found results next url: {:?} {:?}", &next_page, sr["count"]);
             sr["results"]
                 .as_array()
                 .unwrap_or(&Vec::new())
@@ -66,9 +71,7 @@ impl Factor for NextUrlToFetch {
         }
     }
 }
-static BASE_URL: &'static str = "https://api.starwars.run/api";
-
-fn write_to_file<T>(file_name: &'static str, f: impl Fn() -> Collection<T>) -> Result<(), AppError>
+fn write_to_file<T>(file_name: String, f: impl Fn() -> Collection<T>) -> Result<(), AppError>
 where
     T: Serialize,
 {
@@ -85,24 +88,21 @@ where
         error_type: error::AppErrorType::WriteError,
     })
 }
-fn fetch_all_pages(entity: EntityType) -> Vec<Value> {
+fn fetch_all_pages(url: Url) -> Vec<Value> {
     let results = vec![];
     let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-        url: Some(to_url(entity)),
+        url: Some(url),
         results,
     });
 
     active_url.results
 }
-
-fn to_url(entity_type: EntityType) -> Url {
-    match entity_type {
-        _ => format!("{}/{}/", BASE_URL, entity_type),
-    }
+fn format_url(base: String) -> impl Fn(EntityType) -> Url {
+    move |entity_type| -> Url { format!("{}/{}/", &base, entity_type) }
 }
 
-fn to_path(file_name: &'static str) -> Result<File, std::io::Error> {
-    File::create(Path::new(file_name))
+fn to_path(file_name: String) -> Result<File, std::io::Error> {
+    File::create(Path::new(&file_name))
 }
 
 fn to_bytes<T>(all: Collection<T>) -> Result<String, AppError>
@@ -115,60 +115,107 @@ where
         error_type: error::AppErrorType::_InvalidData,
     })
 }
-
 fn main() -> Result<(), AppError> {
-    let _client = reqwest::blocking::Client::builder().build();
+    //init logging
+    env_logger::init();
+
+    info!("main - init app config");
+
+    //create app config
+    let mut app_config = config::Config::default();
+
+    //load the app_config.toml file
+    info!("main - load app config toml file");
+    app_config
+        .merge(config::File::with_name("app_config"))
+        .unwrap();
+
+    let base_url: String = app_config.get("BASE_URL").unwrap();
+    let output_dir: String = app_config.get("OUTPUT_DIR").unwrap();
+
+    let build_entity_url = |entity_type: EntityType| -> Url {
+        let u = apply(format_url, (&base_url).to_string());
+        let url: Url = u(entity_type);
+        url
+    };
 
     //create base output dir
-    fs::create_dir::<_>("output").unwrap();
+    info!("main - creating base output dir");
 
-    //FILMS
+    fs::create_dir::<_>(&output_dir).unwrap();
+    info!("main - load  films");
+    //Film
     let find_all = || {
-        fetch_all_pages(EntityType::Film)
+        fetch_all_pages(build_entity_url(EntityType::Film))
             .into_iter()
             .collect::<Collection<Film>>()
     };
-    write_to_file("output/films.json", find_all)?;
+    info!("main - write films");
 
-    //PLANETS
+    write_to_file(format!("{}/Film.json", &output_dir), find_all)?;
+    info!("main - done  films");
+
+    info!("main - load  Planet");
+    //Planet
     let find_all = || {
-        fetch_all_pages(EntityType::Planet)
+        fetch_all_pages(build_entity_url(EntityType::Planet))
             .into_iter()
             .collect::<Collection<Planet>>()
     };
-    write_to_file("output/planets.json", find_all)?;
+    info!("main - write Planet");
 
-    //SPECIES
+    write_to_file(format!("{}/Planet.json", &output_dir), find_all)?;
+    info!("main - done  Planet");
+
+    info!("main - load  Species");
+    //Species
     let find_all = || {
-        fetch_all_pages(EntityType::Species)
+        fetch_all_pages(build_entity_url(EntityType::Species))
             .into_iter()
             .collect::<Collection<Species>>()
     };
-    write_to_file("output/species.json", find_all)?;
+    info!("main - write Planet");
 
-    //VEHICLES
+    write_to_file(format!("{}/Species.json", &output_dir), find_all)?;
+    info!("main - done  Species");
+
+    info!("main - load  Vehicle");
+    //Vehicle
     let find_all = || {
-        fetch_all_pages(EntityType::Vehicle)
+        fetch_all_pages(build_entity_url(EntityType::Vehicle))
             .into_iter()
             .collect::<Collection<Vehicle>>()
     };
-    write_to_file("output/vehicles.json", find_all)?;
+    info!("main - write Vehicle");
 
-    //STARSHIPS
+    write_to_file(format!("{}/Vehicle.json", &output_dir), find_all)?;
+    info!("main - done  Vehicle");
+   
+
+    info!("main - load  Starship");
+    //Starship
     let find_all = || {
-        fetch_all_pages(EntityType::Starship)
+        fetch_all_pages(build_entity_url(EntityType::Starship))
             .into_iter()
             .collect::<Collection<Starship>>()
     };
-    write_to_file("output/starship.json", find_all)?;
+    info!("main - write Starship");
 
-    //PEOPLE
+    write_to_file(format!("{}/Starship.json", &output_dir), find_all)?;
+    info!("main - done  Starship");
+
+    info!("main - load  People");
+    //People
     let find_all = || {
-        fetch_all_pages(EntityType::People)
+        fetch_all_pages(build_entity_url(EntityType::People))
             .into_iter()
             .collect::<Collection<People>>()
     };
-    write_to_file("output/people.json", find_all)?;
+    info!("main - write People");
+
+    write_to_file(format!("{}/People.json", &output_dir), find_all)?;
+    info!("main - done  People");
+    
     Ok(())
 }
 
