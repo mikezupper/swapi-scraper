@@ -1,268 +1,154 @@
-extern crate log;
+extern crate actix;
 extern crate reqwest;
 
 mod error;
+mod logger;
 mod model;
-use log::info;
-use model::Collection;
-use serde::Serialize;
+mod scraper;
+mod utils;
 
-use serde_json::Value;
-use std::{
-    fs::{self, File},
-    io::Write,
-    path::Path,
-};
-use tokio::join;
+use crate::error::AppError;
+use crate::logger::ThreadLocalDrain;
+use crate::model::SearchResult;
+use crate::scraper::{FetchPageCommand, UrlFetcher};
 
-use crate::{
-    error::AppError,
-    model::{EntityType, Film, People, Planet, Species, Starship, Url, Vehicle},
-};
+use actix::prelude::*;
 
-#[derive(Debug)]
-struct NextUrlToFetch {
-    url: Option<String>,
-    results: Vec<Value>,
-}
+use serde_json::from_str;
+use slog::Drain;
+use slog::{debug, info, o};
+use slog_async;
+use slog_term;
+use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
+use std::sync::Arc;
 
-trait Factor {
-    fn factorial_tail_rec(url: NextUrlToFetch) -> Self;
-    fn factorial(url: NextUrlToFetch) -> Self;
-}
-
-impl Factor for NextUrlToFetch {
-    fn factorial_tail_rec(url: NextUrlToFetch) -> Self {
-        url
-    }
-
-    fn factorial(mut input: NextUrlToFetch) -> Self {
-        //fetch the next results
-        let current_url_to_fetch = &input.url;
-
-        //check pagination "next", match Some/None
-        if let Some(next_url_to_fetch) = current_url_to_fetch {
-            info!("factorial - {:?}", next_url_to_fetch);
-
-            let sr = reqwest::blocking::get(next_url_to_fetch)
-                .unwrap()
-                .json::<Value>()
-                .unwrap();
-
-            let next_page = &sr["next"];
-
-            sr["results"]
-                .as_array()
-                .unwrap_or(&Vec::new())
-                .iter()
-                .for_each(|f| input.results.push(f.to_owned()));
-
-            match next_page {
-                Value::String(next_page) => {
-                    let u = Self::factorial(NextUrlToFetch {
-                        url: Some(next_page.to_string()),
-                        ..input
-                    });
-                    u
-                }
-                _ => NextUrlToFetch { url: None, ..input },
-            }
-        } else {
-            NextUrlToFetch { url: None, ..input }
-        }
-    }
-}
-fn write_to_file<T>(file_name: String, f: impl Fn() -> Collection<T>) -> Result<(), AppError>
-where
-    T: Serialize,
-{
-    let mut file = apply(to_path, file_name).map_err(|e| AppError {
-        message: Some(String::from("failed to create file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::WriteError,
-    })?;
-    let content = apply(to_bytes, f()).map_err(|e| AppError {
-        message: Some(String::from("failed to create content")),
-        cause: None,
-        error_type: error::AppErrorType::WriteError,
-    })?;
-
-    file.write_all(content.as_bytes()).map_err(|e| AppError {
-        message: Some(String::from("failed to write all to file")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::WriteError,
-    })
-}
-fn fetch_all_pages(url: Url) -> Vec<Value> {
-    let results = vec![];
-    let active_url: NextUrlToFetch = Factor::factorial(NextUrlToFetch {
-        url: Some(url),
-        results,
-    });
-
-    active_url.results
-}
-fn format_url(base: String) -> impl Fn(EntityType) -> Url {
-    move |entity_type| -> Url { format!("{}/{}/", &base, entity_type) }
-}
-
-fn to_path(file_name: String) -> Result<File, std::io::Error> {
-    File::create(Path::new(&file_name))
-}
-
-fn to_bytes<T>(all: Collection<T>) -> Result<String, AppError>
-where
-    T: Serialize,
-{
-    serde_json::to_string(&all).map_err(|e| AppError {
-        message: Some(String::from("failed to serialize data to json")),
-        cause: Some(e.to_string()),
-        error_type: error::AppErrorType::_InvalidData,
-    })
-}
-#[tokio::main]
+#[actix::main]
 async fn main() {
-    //init logging
-    env_logger::init();
+    //--- set up slog
 
-    info!("main - init app config");
+    // set up terminal logging
+    let decorator = slog_term::TermDecorator::new().build();
+    let term_drain = slog_term::CompactFormat::new(decorator).build().fuse();
 
+    // json log file
+    let logfile = std::fs::File::create("/var/tmp/actix-test.log").unwrap();
+    let json_drain = slog_json::Json::new(logfile)
+        .add_default_keys()
+        // include source code location
+        .add_key_value(o!("place" =>
+           slog::FnValue(move |info| {
+               format!("{}::({}:{})",
+                       info.module(),
+                       info.file(),
+                       info.line(),
+                )}),
+                "sha"=> env!("VERGEN_GIT_SHA")))
+        .build()
+        .fuse();
+
+    // duplicate log to both terminal and json file
+    let dup_drain = slog::Duplicate::new(json_drain, term_drain);
+    // make it async
+    let async_drain = slog_async::Async::new(dup_drain.fuse()).build();
+    // and add thread local logging
+    let log = slog::Logger::root(ThreadLocalDrain { drain: async_drain }.fuse(), o!());
+    let _scraper_logger = log.new(o!("thread_name"=>"scraper"));
+    let _writer_logger = log.new(o!("thread_name"=>"writer"));
+
+    //--- end of slog setup
+    info!(log, "Started main app");
     //create app config
     let mut app_config = config::Config::default();
 
     //load the app_config.toml file
-    info!("main - load app config toml file");
+    info!(log, "loading app_config.toml");
+
     app_config
         .merge(config::File::with_name("app_config"))
         .unwrap();
 
-    let base_url: String = app_config.get("BASE_URL").unwrap();
-    let output_dir: String = app_config.get("OUTPUT_DIR").unwrap();
+    debug!(log, " reading BASE_URL");
 
-    let build_entity_url = |entity_type: EntityType| -> Url {
-        let u = apply(format_url, (&base_url).to_string());
-        let url: Url = u(entity_type);
-        url
-    };
+    let base_url: String = app_config
+        .get("BASE_URL")
+        .map_err(|err| AppError {
+            message: Some("failed to load config files".to_string()),
+            cause: Some(err.to_string()),
+            error_type: error::AppErrorType::ConfigError,
+        })
+        .unwrap();
+    debug!(log, " reading OUTPUT_DIR");
 
-    //create base output dir
-    info!("main - creating base output dir");
+    let _output_dir: String = app_config.get("OUTPUT_DIR").unwrap();
 
-    fs::create_dir::<_>(&output_dir).unwrap();
+    //fs::create_dir(output_dir).unwrap();
+    info!(log, "fetching base entities");
 
-    let mut handles = vec![];
+    let l = log.new(o!("thread_name"=>"url_fetcher"));
+    let fetch_url_addr = SyncArbiter::start(3, move || UrlFetcher { logger:l.clone() });
+    let resp = fetch_url_addr
+        .send(FetchPageCommand {
+            entity_type: String::from("root"),
+            base_url,
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    let root_entities: HashMap<String, String> = from_str(&resp).unwrap();
 
-    handles.push(tokio::spawn(async move {
-        info!("main - load  films");
-        //Film
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::Film))
-                .into_iter()
-                .collect::<Collection<Film>>()
-        };
-        info!("main - write films");
-
-        write_to_file(format!("{}/Film.json", &output_dir), find_all);
-        info!("main - done  films");
-    }));
-
-    handles.push(tokio::spawn(async move {
-        info!("main - load  Planet");
-        //Planet
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::Planet))
-                .into_iter()
-                .collect::<Collection<Planet>>()
-        };
-        info!("main - write Planet");
-
-        write_to_file(format!("{}/Planet.json", &output_dir), find_all);
-        info!("main - done  Planet");
-    }));
-
-    handles.push(tokio::spawn(async move {
-        info!("main - load  Species");
-        //Species
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::Species))
-                .into_iter()
-                .collect::<Collection<Species>>()
-        };
-        info!("main - write Planet");
-
-        write_to_file(format!("{}/Species.json", &output_dir), find_all);
-        info!("main - done  Species");
-    }));
-
-    handles.push(tokio::spawn(async move {
-        info!("main - load  Vehicle");
-        //Vehicle
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::Vehicle))
-                .into_iter()
-                .collect::<Collection<Vehicle>>()
-        };
-        info!("main - write Vehicle");
-
-        write_to_file(format!("{}/Vehicle.json", &output_dir), find_all);
-        info!("main - done  Vehicle");
-    }));
-
-    handles.push(tokio::spawn(async move {
-        info!("main - load  Starship");
-        //Starship
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::Starship))
-                .into_iter()
-                .collect::<Collection<Starship>>()
-        };
-        info!("main - write Starship");
-
-        write_to_file(format!("{}/Starship.json", &output_dir), find_all);
-        info!("main - done  Starship");
-    }));
-
-    handles.push(tokio::spawn(async move {
-        info!("main - load  People");
-        //People
-        let find_all = || {
-            fetch_all_pages(build_entity_url(EntityType::People))
-                .into_iter()
-                .collect::<Collection<People>>()
-        };
-        info!("main - write People");
-
-        write_to_file(format!("{}/People.json", &output_dir), find_all);
-        info!("main - done  People");
-    }));
-
-    let joins = join!(
-        handles.pop().unwrap(),
-        handles.pop().unwrap(),
-        handles.pop().unwrap(),
-        handles.pop().unwrap(),
-        handles.pop().unwrap(),
-        handles.pop().unwrap()
-    );
-    joins.0.unwrap();
-    joins.1.unwrap();
-    joins.2.unwrap();
-    joins.3.unwrap();
-    joins.4.unwrap();
-    joins.5.unwrap();
+    for n in root_entities {
+        let y = fetch_url_addr
+            .send(FetchPageCommand {
+                entity_type: n.0.to_string(),
+                base_url: n.1.to_string(),
+            })
+            .await
+            .map_err(|err| AppError {
+                message: Some("failed to load url".to_string()),
+                cause: Some(err.to_string()),
+                error_type: error::AppErrorType::_FetchError,
+            })
+            .unwrap()
+            .unwrap();
+       // info!(log, "Response came in {:?}", y);
+    }
 }
 
-fn apply<F, A, B>(fun: F, args: A) -> B
-where
-    F: Fn(A) -> B,
-{
-    fun(args)
-}
+//  fn main2() {
+//     //init logging
+//     env_logger::init();
 
-fn _compose<X, Y, Z, F, G>(f: F, g: G) -> impl Fn(X) -> Z
-where
-    F: Fn(X) -> Y,
-    G: Fn(Y) -> Z,
-{
-    move |x| g(f(x))
-}
+//     info!("main - init app config");
+//     //create app config
+//     let mut app_config = config::Config::default();
+
+//     //load the app_config.toml file
+//     info!("main - load app config toml file");
+//     app_config
+//         .merge(config::File::with_name("app_config"))
+//         .unwrap();
+
+//     let base_url: String = app_config
+//         .get("BASE_URL")
+//         .map_err(|err| AppError {
+//             message: Some("failed to load config files".to_string()),
+//             cause: Some(err.to_string()),
+//             error_type: error::AppErrorType::ConfigError,
+//         })
+//         .unwrap();
+
+//     let output_dir: String = app_config.get("OUTPUT_DIR").unwrap();
+
+//     info!("main - creating base output dir");
+//     fs::create_dir(output_dir).unwrap();
+
+//     debug!("main - base_url  {:?}", &base_url);
+
+//     let base_entities = reqwest::blocking::get(&base_url)
+//         .unwrap()
+//         .json::<Value>()
+//         .unwrap();
+//     dbg!(base_entities);
+// }

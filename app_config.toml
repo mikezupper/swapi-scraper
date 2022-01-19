@@ -1,2 +1,2 @@
-BASE_URL = "https://api.starwars.run/api"
-OUTPUT_DIR = "output"
+BASE_URL = "https://api.starwars.run/api/"
+OUTPUT_DIR = "./output/"
