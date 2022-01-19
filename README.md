@@ -10,3 +10,11 @@ For this experiment, we will use the https://api.starwars.run REST API. A simple
 2. Tail Recursion
 3. Function Compostion
 4. and more!!!!
+
+
+without threads:
+[2022-01-14T18:22:15Z INFO  sw_scraper] START
+[2022-01-14T18:22:58Z INFO  sw_scraper] FINISH
+43 seconds
+
+with threads

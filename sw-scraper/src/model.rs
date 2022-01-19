@@ -155,7 +155,7 @@ impl From<Value> for People {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default,PartialEq)]
 pub struct Film {
     #[serde(skip_deserializing)]
     id: String,

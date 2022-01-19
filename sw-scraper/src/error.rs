@@ -3,6 +3,7 @@ pub enum AppErrorType {
     _FetchError,
     _NotFound,
     _InvalidData,
+    ConfigError,
     WriteError,
 }
 
