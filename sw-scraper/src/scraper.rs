@@ -1,8 +1,6 @@
 use actix::prelude::*;
 use slog::info;
 
-use crate::error::AppError;
-
 pub(crate) struct _AppState {
     logger: slog::Logger,
 }
@@ -23,12 +21,12 @@ pub(crate) struct UrlFetcher {
 impl Actor for UrlFetcher {
     type Context = SyncContext<Self>;
 
-    fn started(&mut self, ctx: &mut SyncContext<Self>) {
+    fn started(&mut self, _ctx: &mut SyncContext<Self>) {
         info!(self.logger, "UrlFetcher started");
     }
 
-    fn stopped(&mut self, ctx: &mut SyncContext<Self>) {
-        info!(self.logger,"UrlFetcher stopped");
+    fn stopped(&mut self, _ctx: &mut SyncContext<Self>) {
+        info!(self.logger, "UrlFetcher stopped");
     }
 }
 
@@ -36,16 +34,15 @@ impl Actor for UrlFetcher {
 impl Handler<FetchPageCommand> for UrlFetcher {
     type Result = Result<String, reqwest::Error>;
 
-    fn handle(&mut self, msg: FetchPageCommand, ctx: &mut SyncContext<Self>) -> Self::Result {
-        let text =reqwest::blocking::get(msg.base_url).unwrap().text();
+    fn handle(&mut self, msg: FetchPageCommand, _ctx: &mut SyncContext<Self>) -> Self::Result {
+        let text = reqwest::blocking::get(msg.base_url).unwrap().text();
         if let Ok(_) = text {
-            info!(self.logger,"got the text back");
+            info!(self.logger, "got the text back");
             text
         } else {
-            info!(self.logger,"no text???");
+            info!(self.logger, "no text???");
             todo!();
         }
-        
     }
 }
 
@@ -58,7 +55,7 @@ pub struct SearchResultResponse {
 
 // Actor definition
 struct SwScraper {
-    name: String,
+    //name: String,
     recipient: Recipient<FetchPageCommand>,
 }
 
@@ -70,14 +67,16 @@ impl Actor for SwScraper {
 impl Handler<SearchResultResponse> for SwScraper {
     type Result = ();
 
-    fn handle(&mut self, msg: SearchResultResponse, ctx: &mut Context<Self>) {
+    fn handle(&mut self, msg: SearchResultResponse, _ctx: &mut Context<Self>) {
         let url = match msg.next {
             Some(it) => it,
             _ => return,
         };
-        self.recipient.do_send(FetchPageCommand {
-            base_url: url,
-            entity_type: "todo!()".to_string(),
-        });
+        self.recipient
+            .do_send(FetchPageCommand {
+                base_url: url,
+                entity_type: "todo!()".to_string(),
+            })
+            .unwrap();
     }
 }

@@ -4,7 +4,7 @@ pub enum AppErrorType {
     _NotFound,
     _InvalidData,
     ConfigError,
-    WriteError,
+    _WriteError,
 }
 
 #[derive(Debug)]
